@@ -1,28 +1,31 @@
 import argparse
 import json
 import time
-import requests
-from config import get_cookies, get_headers
+from config import api
+from language import decide_from_challenge
 
 parser = argparse.ArgumentParser(description='Test code against HackerRank sample cases')
-parser.add_argument('--contest', required=True, help='Contest slug (e.g. codemania-v6-0-finale-datathon)')
+parser.add_argument('--contest', required=True, help='Contest slug')
 parser.add_argument('--question', required=True, help='Question/challenge slug (e.g. real-time-rolling-features)')
-parser.add_argument('--language', default='python3', help='Programming language (default: python3)')
+parser.add_argument('--language', help='Ignored. The script reads the challenge and chooses.')
 parser.add_argument('--file', required=True, help='Path to the code file to test')
 parser.add_argument('--timeout', type=int, default=30, help='Max seconds to wait for results (default: 30)')
 args = parser.parse_args()
+
+language, _, report = decide_from_challenge(args.contest, args.question)
+print(report)
+print()
 
 with open(args.file) as f:
     code = f.read()
 
 # Step 1: Submit code for compilation/testing
-compile_response = requests.post(
+compile_response = api(
+    'POST',
     f'https://www.hackerrank.com/rest/contests/{args.contest}/challenges/{args.question}/compile_tests',
-    cookies=get_cookies(),
-    headers=get_headers(),
     json={
         'code': code,
-        'language': args.language,
+        'language': language,
         'customtestcase': False,
     },
 ).json()
@@ -37,7 +40,7 @@ print(f"Test submitted (id: {test_id}). Polling for results...")
 # Step 2: Poll for results
 base_url = f'https://www.hackerrank.com/rest/contests/{args.contest}/challenges/{args.question}/compile_tests/{test_id}'
 start_time = time.time()
-poll_interval = 2  # seconds
+poll_interval = 0.4
 
 while True:
     elapsed = time.time() - start_time
@@ -45,11 +48,7 @@ while True:
         print(f"Timed out after {args.timeout}s waiting for test results.")
         raise SystemExit(1)
 
-    result = requests.get(
-        base_url,
-        cookies=get_cookies(),
-        headers=get_headers(),
-    ).json()
+    result = api('GET', base_url).json()
 
     model = result.get('model', {})
     status = model.get('status', None)

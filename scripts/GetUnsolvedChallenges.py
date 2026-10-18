@@ -1,18 +1,16 @@
 import argparse
 import json
 import sys
-import requests
-from config import get_cookies, get_headers
+from config import api
 
 parser = argparse.ArgumentParser(description='List unsolved challenges in a HackerRank contest')
 parser.add_argument('--contest', required=True, help='Contest slug')
 parser.add_argument('--limit', type=int, default=100, help='Max challenges to fetch (default: 100)')
 args = parser.parse_args()
 
-response = requests.get(
+response = api(
+    'GET',
     f'https://www.hackerrank.com/rest/contests/{args.contest}/challenges?&limit={args.limit}',
-    cookies=get_cookies(),
-    headers=get_headers(),
 )
 
 data = response.json()
