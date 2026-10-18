@@ -1,6 +1,6 @@
 # HackerRank Skill
 
-Use this skill to interact with HackerRank contests — submit code, run test cases, or list challenges.
+Use this skill to interact with HackerRank contests — list challenges, run tests, submit code, and solve questions.
 
 ## Credential Setup (First Time)
 
@@ -36,6 +36,7 @@ python3 scripts/GetChallenge.py --contest <contest_slug> --question <question_sl
 ```
 Outputs the cleaned problem statement with input/output format, constraints, and sample cases.
 HTML, SVG, and CSS are automatically stripped for readability.
+The header reports `Language lock`, `Use language`, and `File extension`.
 Use `--raw` flag for filtered JSON (still excludes bulky language templates).
 
 ### List Unsolved Challenges
@@ -46,15 +47,16 @@ Returns JSON with an `unsolved` array of `{name, slug}` objects.
 
 ### Test Code (sample test cases)
 ```
-python3 scripts/testCode.py --contest <contest_slug> --question <question_slug> --language <language> --file <path_to_code_file>
+python3 scripts/testCode.py --contest <contest_slug> --question <question_slug> --file <path_to_code_file>
 ```
-Submits code, **polls until compilation/testing finishes** (default 30s timeout), and displays pass/fail per test case.
+Reads the challenge, chooses the language, then polls until compilation/testing finishes (default 30s timeout) and displays pass/fail per test case.
 Use `--timeout <seconds>` to adjust the wait time.
 
 ### Submit Code
 ```
-python3 scripts/SubmitCode.py --contest <contest_slug> --question <question_slug> --language <language> --file <path_to_code_file> [--wait]
+python3 scripts/SubmitCode.py --contest <contest_slug> --question <question_slug> --file <path_to_code_file> [--wait]
 ```
+Reads the challenge and chooses the language before submitting.
 Use `--wait` to poll for judging results instead of just returning the submission ID.
 Use `--timeout <seconds>` to adjust wait time (default: 60s).
 
@@ -68,9 +70,9 @@ Polls until judging completes and shows the final status, score, and test case r
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `--contest` | Contest slug from the URL | `codemania-v6-0-finale-datathon` |
-| `--question` | Challenge slug from the URL | `real-time-rolling-features` |
-| `--language` | Language identifier | `python3`, `java`, `cpp`, `javascript` |
+| `--contest` | Contest slug from the URL | |
+| `--question` | Challenge slug from the URL | |
+| `--language` | Ignored. Test and submit choose from the challenge. | |
 | `--file` | Path to your solution file | `solution.py` |
 | `--wait` | (SubmitCode) Wait for judging to complete | flag, no value |
 | `--raw` | Output raw/filtered JSON instead of summary | flag, no value |
@@ -83,65 +85,106 @@ The contest and question slugs come from the HackerRank URL:
 
 Or use `RetrieveAllChallenges.py` to list all slugs.
 
+## Solution style
+
+`GetChallenge.py` prints `Language lock`, `Use language`, and `File extension`. Test and submit make the same choice. Write `solutions/<question_slug>` plus that file extension.
+
+- `Language lock: no`: write Python 3.
+- `Language lock: yes`: write only `Use language`.
+
+Write the file the way a person writes a contest solution. No comments, docstrings, or section banners. No extra scaffolding, no file I/O, and no class or helper unless the algorithm needs one (recursion, DFS, a search). Short names are fine (`n`, `s`, `a`, `ans`). Match the required output exactly.
+
+Python 3:
+
+- Read stdin with `input()`, in the shape the statement uses. Examples: `s = input()`, `n = int(input())`, `a = list(map(int, input().split()))`.
+- Print with `print`.
+- Put the logic at top level. No `if __name__ == "__main__"`.
+- Use `sys.stdin.read()` only when the constraints make per-line `input()` too slow.
+
+A locked language uses that same standard:
+
+- Read stdin the usual way for that language and print the answer. C++ uses `cin` or `scanf` inside `int main()`. Java reads with `Scanner` or `BufferedReader`.
+- Do not add a Python `if __name__ == "__main__"` guard.
+
+The only goal is every test case passing.
+
 ## Workflow
 
-When the user asks to submit or test code:
+When the user asks to submit or test a file they already wrote:
 1. Check credentials exist (create if needed)
-2. Confirm `contest_slug`, `question_slug`, `language`, and the code file path
+2. Confirm `contest_slug`, `question_slug`, and the code file path. Do not pass `--language`. The test and submit scripts choose it.
 3. For testing: run `testCode.py` and show the result
 4. For submitting: run `SubmitCode.py --wait` and show the submission result
-5. If the user wants to find question slugs first, run `RetrieveAllChallenges.py`
+5. If the user wants question slugs first, run `RetrieveAllChallenges.py`
 
-## Solving Unsolved Challenges in Parallel
+When the user adds or names questions to solve, use the next section. Do not solve those questions in this chat, and do not ask which language to use.
 
-When the user asks to solve unsolved challenges (e.g. "solve all unsolved questions"):
+## Solving questions in parallel
 
-### Step 1 — Discover unsolved challenges
+Use this when the user adds one or more questions, pastes contest URLs, or says to solve a contest or its unsolved questions.
+
+Spawn one subagent per question, all in the same response, so the questions run at the same time. Contest time counts. The prompt below is the whole procedure.
+
+### Step 1 — Which questions
+
+If the user already gave slugs or URLs, use those. Slugs are the path segments described in How to find slugs.
+
+If they asked to solve a contest and did not list questions:
+
 ```
 cd <project_root> && python3 scripts/GetUnsolvedChallenges.py --contest <contest_slug>
 ```
-Parse the `unsolved` array from the JSON output. Cap to a maximum of **10** challenges.
 
-### Step 2 — Spawn parallel agents
-For each unsolved challenge (up to 10), launch a subagent using the Agent tool **in parallel** (all in the same response). Each agent receives this prompt:
+Solve every object in the `unsolved` array. If the API has no solved field and every challenge comes back unsolved, solve them anyway and say that in the summary. Do not wait for confirmation.
+
+### Step 2 — Spawn one agent per question
+
+Launch every agent in parallel. One question, one agent, one file: `solutions/<question_slug>` plus the printed file extension.
+
+If there are more than 10 questions, start the first 10 immediately. As soon as one finishes, start the next unsolved question. Do not pause between batches to ask.
+
+Each agent receives this prompt:
 
 ```
-You are solving a HackerRank challenge. Project root: <project_root>
+You are solving one HackerRank challenge. Project root: <project_root>
 
 Contest: <contest_slug>
 Challenge: <question_slug> (<challenge_name>)
-Language: <language>
 
-Steps:
-1. Read the problem statement:
-   cd <project_root> && python3 scripts/GetChallenge.py --contest <contest_slug> --question <question_slug>
+Do not search the web. Do not list directories. Do not grep. Do not read SKILL.md. Do not write a plan. Call 2 must be a real solution for the full problem, not a stub. Success is Accepted, every test passed.
 
-2. Analyze the output carefully — identify input format, output format, constraints, and examples.
+1. cd <project_root> && python3 scripts/GetChallenge.py --contest <contest_slug> --question <question_slug>
+2. Write <project_root>/solutions/<question_slug><file extension> on the next call. Obey Language lock, Use language, and File extension. No comments and no extra scaffolding. Python: input() and print, no main guard. Any other language: that language's normal stdin and stdout.
+3. Run the samples when the platform has them:
+   cd <project_root> && python3 scripts/testCode.py --contest <contest_slug> --question <question_slug> --file solutions/<question_slug><file extension> --timeout 20
+   If the output says SOME FAILED, fix the file and run this again. Do not submit while any sample fails.
+   If the output says ALL PASSED, submit.
+   If it prints no test cases, there is nothing to gate on. Submit immediately.
+4. Submit:
+   cd <project_root> && python3 scripts/SubmitCode.py --contest <contest_slug> --question <question_slug> --file solutions/<question_slug><file extension> --wait --timeout 90
 
-3. Write a solution to a file: <project_root>/solutions/<question_slug>.<ext>
-   (Create the solutions/ directory if needed)
-
-4. Test the solution:
-   cd <project_root> && python3 scripts/testCode.py --contest <contest_slug> --question <question_slug> --language <language> --file solutions/<question_slug>.<ext>
-   Review the test result. If tests fail, fix the solution and retry (max 3 attempts).
-
-5. If tests pass, submit:
-   cd <project_root> && python3 scripts/SubmitCode.py --contest <contest_slug> --question <question_slug> --language <language> --file solutions/<question_slug>.<ext> --wait
-
-6. Report back: challenge name, submission status, score, and whether it passed.
+When there are no samples, the submit is still due within 2 minutes. If a judged test fails, edit that same file and submit again until Accepted. Report the challenge name, submission id, status, score, language, and how many test cases passed.
 ```
 
 ### Step 3 — Summarize results
-After all agents finish, collect their results and present a table:
 
-| Challenge | Status | Score |
-|-----------|--------|-------|
-| ...       | ...    | ...   |
+After the agents finish, report:
 
-### Notes
-- Max 10 parallel agents at once. If there are more than 10 unsolved challenges, run in batches.
-- If `GetUnsolvedChallenges.py` cannot determine solved status (no solved field in API), it treats all challenges as unsolved — inform the user and ask whether to proceed.
-- Each agent writes its solution to `solutions/<question_slug>.<ext>` so solutions are preserved.
+| Challenge | Status | Score | Tests |
+|-----------|--------|-------|-------|
+| ...       | ...    | ...   | ...   |
+
+Include any question that is still not Accepted, and the last status the judge returned.
+
+## Watching for new questions
+
+While a contest is open, poll it every 60 seconds:
+
+```
+python3 -u scripts/watch_new_challenges.py --contest <contest_slug> --interval 60
+```
+
+Run that under the monitor tool. The first pass records the challenges already listed and stays quiet. A later pass prints one `ACTION_REQUIRED` line only when a new slug appears. Spawn one solver per new slug in that same turn, using the prompt above. Do not ask the user. Leave the watcher running until it prints `DONE` because the contest ended.
 
 ## Updating Credentials
 

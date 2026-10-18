@@ -1,8 +1,7 @@
 import argparse
 import json
 import time
-import requests
-from config import get_cookies, get_headers
+from config import api
 
 parser = argparse.ArgumentParser(description='Check status of a HackerRank submission')
 parser.add_argument('--contest', required=True, help='Contest slug')
@@ -12,7 +11,7 @@ args = parser.parse_args()
 
 base_url = f'https://www.hackerrank.com/rest/contests/{args.contest}/submissions/{args.submission_id}'
 start_time = time.time()
-poll_interval = 3
+poll_interval = 0.4
 
 print(f"Checking submission {args.submission_id}...")
 
@@ -22,11 +21,7 @@ while True:
         print(f"Timed out after {args.timeout}s waiting for judging.")
         raise SystemExit(1)
 
-    result = requests.get(
-        base_url,
-        cookies=get_cookies(),
-        headers=get_headers(),
-    ).json()
+    result = api('GET', base_url).json()
 
     model = result.get('model', {})
     status = model.get('status', '')

@@ -2,8 +2,8 @@ import argparse
 import json
 import re
 import html as html_module
-import requests
-from config import get_cookies, get_headers
+from config import api
+from language import language_report
 
 parser = argparse.ArgumentParser(description='Fetch problem statement for a HackerRank challenge')
 parser.add_argument('--contest', required=True, help='Contest slug')
@@ -11,10 +11,9 @@ parser.add_argument('--question', required=True, help='Question/challenge slug')
 parser.add_argument('--raw', action='store_true', help='Output raw JSON instead of cleaned text')
 args = parser.parse_args()
 
-response = requests.get(
+response = api(
+    'GET',
     f'https://www.hackerrank.com/rest/contests/{args.contest}/challenges/{args.question}',
-    cookies=get_cookies(),
-    headers=get_headers(),
 )
 
 data = response.json()
@@ -72,11 +71,12 @@ else:
     if len(cleaned) < 50 and problem_statement:
         cleaned = problem_statement
 
+    _, _, report = language_report(model.get('languages'))
     print(f"Challenge: {model.get('name', 'Unknown')}")
     print(f"Slug: {model.get('slug', 'Unknown')}")
     print(f"Max Score: {model.get('max_score', '?')}")
     print(f"Difficulty: {model.get('difficulty_name', '?')}")
-    print(f"Languages: {', '.join(model.get('languages', []))}")
+    print(report)
     print(f"{'='*60}")
     print()
     print(cleaned)

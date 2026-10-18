@@ -1,6 +1,14 @@
 import json
 import os
+import socket
 import sys
+
+import requests
+from urllib3.util import connection as urllib3_connection
+
+urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+
+_session = None
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'credentials.json')
 CONFIG_PATH = os.path.abspath(CONFIG_PATH)
@@ -33,6 +41,25 @@ def get_headers():
         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
         'x-csrf-token': creds['x-csrf-token'],
     }
+
+
+def get_session():
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        _session.trust_env = False
+    return _session
+
+
+def api(method, url, **kwargs):
+    kwargs.setdefault('timeout', (3, 20))
+    return get_session().request(
+        method,
+        url,
+        cookies=get_cookies(),
+        headers=get_headers(),
+        **kwargs,
+    )
 
 
 if __name__ == '__main__':
